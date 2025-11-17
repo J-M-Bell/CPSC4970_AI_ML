@@ -66,4 +66,56 @@ class RNNTextModel:
         model.compile(optimizer="adam", loss=CategoricalCrossentropy(), metrics=["categorical_accuracy"])
         return model
     
-    def 
+    def encode_input_string(self, string):
+        v = np.array(list(string)).reshape((self.time_steps, 1))
+        return self.encoder.transform(v)
+    
+    def fit(self, prefix, epochs=2):
+        info("Fitting...")
+        callbacks = []
+        if prefix is not None:
+            checkpoint = ModelCheckpoint(prefix + "-{epoch:03d}-{loss:.4f}.hdf5", monitor='loss', verbose=1,
+                                         save_best_only=True, mode='min')
+            callbacks = [checkpoint]
+        self.model.fit(self.X_delayed, self.y_delayed, epochs=epochs, verbose=True, callbacks=callbacks, batch_size=1000)
+
+    def load_weights(self, filename):
+        info(f"Loading weights from {filename}...")
+        self.model.load_weights(filename)
+    
+    def predict_from_seed(self, seed, prediction_count):
+        info("Predicting output sequence...")
+        result = seed
+        new_seed = seed
+        for i in range(prediction_count):
+            inp = self.encode_input_string(new_seed)
+            debug(f"{inp=}")
+            p = self.encoder.inverse_transform(self.model.predict(np.array([inp])))
+            debug(f"{p=}")
+            result += p[0][0]
+            new_seed = result[-len(seed):]
+        return result
+    
+
+def main_kafka():
+    m = RNNTextModel(open("./kafka_english_the_trial.txt.cleaned").read(), 100)
+    m.load_weights("lstm_weights/kafka_trail", 50)
+    #m.fit("lstm_weights/kafka_trial", 50)
+    #seed = '''done nothing wrong but, one morning, he was arrested. every day at
+    #eight in the morning he was brought his breakfast by'''[0:100]
+    seed = '''he walked to the bank to find the painter but there was no one
+    there. he did not understand who had taken'''[:100]
+    print(f"Seed: {seed}")
+    print(m.predict_from_seed(seed, 300))
+
+def main_debug():
+    m = RNNTextModel("abcbab", 2)
+    m.fit(None, 200)
+    seed = "ab"
+    print(f"Seed: {seed}")
+    print(m.predict_from_seed(seed, 15))
+
+def main():
+    main_kafka()
+    
+    
